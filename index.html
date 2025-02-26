@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>健康习惯评分表</title>
+    <style>
+        /* (样式与之前相同，保持不变) */
+        body {
+            font-family: '微软雅黑', sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            color: #4CAF50;
+            text-align: center;
+        }
+
+        h2 {
+            margin-top: 30px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+		.ranking-container {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            display: none; /* 初始隐藏 */
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+		#showRankingBtn{
+			background-color: #47a84a;
+		}
+        button:hover {
+            background-color: #3e8e41;
+        }
+		.backup-buttons {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+
+        #score {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        #feedback {
+            margin-top: 10px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+		#chartContainer{
+			width: 80%;
+            height: auto;
+			margin: 0 auto;
+		}
+        #scoreChart {
+            /*width: 400px; !* 移除固定宽度 *!*/
+            /*height: 300px;*/
+			max-width: 100%;
+            height: auto;
+        }
+		#importFile {
+            display: none; /* 隐藏文件选择框 */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>健康习惯评分表</h1>
+		<p>今天是：<span id="currentDate"></span></p>
+        <h2>运动规划 (总分: 120)</h2>
+        <div>
+            <label><input type="checkbox" data-score="30"> 晨间30分钟自重循环 (30分)</label>
+            <label><input type="checkbox" data-score="20"> 午后20分钟屏幕中断训练 (20分)</label>
+            <label><input type="checkbox" data-score="40"> 傍晚40分钟正念行走 (40分)</label>
+            <label><input type="checkbox" data-score="15"> 运动时段与尼古丁依赖时段重叠 (15分)</label>
+            <label><input type="checkbox" data-score="15"> 采用"5%革命"原则 (15分)</label>
+        </div>
+
+        <h2>饮食规划 (总分: 90)</h2>
+        <div>
+            <label><input type="checkbox" data-score="20"> 实施"五感饮食法" (20分)</label>
+            <label><input type="checkbox" data-score="25"> 蛋白质前置 (25分)</label>
+            <label><input type="checkbox" data-score="25"> 强制单任务进食 (25分)</label>
+            <label><input type="checkbox" data-score="20"> 暴食时段转为短视频创作 (20分)</label>
+        </div>
+		
+
+        <button onclick="calculateScore()">计算总分</button>
+		<button id="showRankingBtn" onclick="showRanking()">查看得分排行</button>
+		<div class="backup-buttons">
+            <button onclick="exportData()">导出数据</button>
+            <button onclick="document.getElementById('importFile').click()">导入数据</button>
+            <input type="file" id="importFile" accept=".json" onchange="importData(this)">
+        </div>
+        <div id="result">
+            <p>总分: <span id="score">0</span></p>
+            <p id="feedback"></p>
+			<div id="chartContainer">
+				<canvas id="scoreChart"></canvas>
+			</div>
+        </div>
+		<div class="ranking-container" id="rankingContainer">
+			<h2>得分排行</h2>
+			<div id="rankingContent"></div>
+		</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+		//设置日期
+		const today = new Date();
+		const year = today.getFullYear();
+		const month = String(today.getMonth() + 1).padStart(2, '0');
+		const day = String(today.getDate()).padStart(2, '0');
+
+		const formattedDate = `${year}年${month}月${day}日`;
+		document.getElementById('currentDate').textContent = formattedDate;
+		
+		//获取canvas元素
+		const ctx = document.getElementById('scoreChart').getContext('2d');
+		//初始化一个空的全局Chart对象
+		let myChart = null;
+		
+        function calculateScore() {
+            let totalScore = 0;
+            const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    totalScore += parseInt(checkbox.dataset.score);
+                }
+            });
+
+            document.getElementById('score').textContent = totalScore;
+
+            let feedbackText = "";
+            if (totalScore < 105) {
+                feedbackText = "喂，我说，你这分数也太难看了吧？是不是把健康当儿戏呢？不过，也别灰心，这不还没放弃嘛。记住，改变不是一蹴而就的，每天进步一点点，总比原地踏步强！";
+            } else if (totalScore < 160) {
+                feedbackText = "嗯，有进步，但还不够！你这分数不上不下的，就像温吞水一样，没劲！再加把劲，把那些没完成的项目都啃下来。记住，坚持才是王道！";
+            } else {
+                feedbackText = "哇！干得漂亮！你这分数简直闪瞎我的眼！继续保持这种势头，你就是健康达人！不过，也别骄傲哦，继续努力，让健康成为你最亮眼的标签！";
+            }
+            document.getElementById('feedback').textContent = feedbackText;
+			
+			
+			//绘制或更新图表
+			 updateChart(totalScore);
+			 //保存分数
+			 saveScore(totalScore);
+        }
+		
+		
+		//绘制或更新图表
+		function updateChart(totalScore){
+			const completed = totalScore;
+			const remaining = 210 - totalScore;
+			
+			const chartData = {
+				labels: ['已完成', '未完成'],
+				datasets:[{
+					label: '分数',
+					data: [completed, remaining],
+					backgroundColor: [
+						'rgba(76, 175, 80, 0.6)', //绿色
+						'rgba(255, 99, 132, 0.6)', //红色
+					],
+					borderColor:[
+						'rgba(76, 175, 80, 1)',
+						'rgba(255, 99, 132, 1)',
+					],
+					borderWidth: 1
+				}]
+			};
+			
+			const chartConfig = {
+				type: 'radar', //改为雷达图
+				data: chartData,
+				options: {
+					responsive: true, //图表响应式
+					maintainAspectRatio: false, //不保持宽高比
+					elements: {
+						line: {
+							borderWidth: 3
+						}
+					},
+					scales: {
+						r: {
+							beginAtZero: true,
+							max: 210, //最大值
+							min: 0,   //最小值
+							ticks:{
+								stepSize: 30, //刻度间隔
+							}
+						}
+					}
+				},
+			};
+			
+			//如果图表已经存在，则更新数据；否则创建新图表
+			if(myChart){
+				myChart.data = chartData;
+				myChart.update();
+			}else{
+				myChart = new Chart(ctx, chartConfig);
+			}
+			
+			
+			
+		}
+		
+		//保存分数
+		function saveScore(score) {
+			const today = new Date();
+			const year = today.getFullYear();
+			const month = String(today.getMonth() + 1).padStart(2, '0');
+			const day = String(today.getDate()).padStart(2, '0');
+			const dateStr = `${year}-${month}-${day}`;
+			
+			//尝试从localStorage中获取数据
+			let scores = localStorage.getItem('dailyScores');
+			scores = scores ? JSON.parse(scores) : {}; //如果没有数据，创建一个空对象
+			
+			//更新或添加当日的分数
+			scores[dateStr] = score;
+			
+			//将更新后的分数对象保存回localStorage
+			localStorage.setItem('dailyScores', JSON.stringify(scores));
+		}
+		
+		//页面加载时计算一次分数，更新图表和保存分数
+		//calculateScore();
+		
+		
+		//显示分数排行
+		function showRanking(){
+			const rankingContainer = document.getElementById('rankingContainer');
+			rankingContainer.style.display = rankingContainer.style.display === 'none' ? 'block' : 'none';
+			
+			//获取并显示排名
+			displayRanking();
+		}
+		
+		//获取并显示排名
+		function displayRanking(){
+			const rankingContent = document.getElementById('rankingContent');
+			rankingContent.innerHTML = ''; //清空之前的内容
+			
+			//从localStorage中获取所有分数数据
+			let scores = localStorage.getItem('dailyScores');
+			scores = scores ? JSON.parse(scores) : {};
+			
+			//将分数数据转换为数组，并按日期排序
+			const scoreArray = Object.entries(scores).sort((a, b) => {
+				return new Date(b[0]) - new Date(a[0]); //降序排序
+			});
+			
+			//获取当前月份
+			const currentMonth = new Date().getMonth() + 1;
+			
+			//筛选出当月的数据
+			const currentMonthScores = scoreArray.filter(([date, score]) => {
+				const scoreMonth = new Date(date).getMonth() + 1;
+				return scoreMonth === currentMonth;
+			});
+			
+			if(currentMonthScores.length === 0){
+				rankingContent.textContent = "本月暂无数据";
+				return;
+			}
+			
+			
+			//创建表格元素
+			const table = document.createElement('table');
+			const thead = document.createElement('thead');
+			const tbody = document.createElement('tbody');
+			
+			//添加表头
+			const headerRow = document.createElement('tr');
+			['日期', '分数'].forEach(text => {
+				const th = document.createElement('th');
+				th.textContent = text;
+				headerRow.appendChild(th);
+			});
+			thead.appendChild(headerRow);
+			table.appendChild(thead);
+			
+			//添加数据行
+			currentMonthScores.forEach(([date, score]) => {
+				const tr = document.createElement('tr');
+				const dateCell = document.createElement('td');
+				const scoreCell = document.createElement('td');
+				
+				dateCell.textContent = date;
+				scoreCell.textContent = score;
+				
+				tr.appendChild(dateCell);
+				tr.appendChild(scoreCell);
+				tbody.appendChild(tr);
+			});
+			
+			table.appendChild(tbody);
+			rankingContent.appendChild(table);
+			
+		}
+		// 导出数据
+        function exportData() {
+            let scores = localStorage.getItem('dailyScores');
+            if (!scores) {
+                alert("没有可导出的数据！"); // 如果没有数据，提示用户
+                return;
+            }
+
+            // 创建一个下载链接
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(scores);
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "health_scores_backup.json"); // 设置下载文件名
+            document.body.appendChild(downloadAnchorNode); // Firefox 需要添加到 body 中
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        // 导入数据
+        function importData(input) {
+            const file = input.files[0];
+            if (!file) {
+                alert("请选择要导入的文件！");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+
+                    // 获取当前 localStorage 中的数据
+                    let currentScores = localStorage.getItem('dailyScores');
+                    currentScores = currentScores ? JSON.parse(currentScores) : {};
+
+                    // 合并导入的数据和当前数据 (导入的数据覆盖已有的)
+                    const mergedScores = { ...currentScores, ...importedData };
+
+                    // 将合并后的数据保存回 localStorage
+                    localStorage.setItem('dailyScores', JSON.stringify(mergedScores));
+
+                    alert("数据导入成功！");
+					//刷新排行榜
+					displayRanking();
+                    // 重新加载页面，以显示导入的数据
+                    location.reload();
+                } catch (error) {
+                    alert("文件格式错误，请选择有效的备份文件！");
+                }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
